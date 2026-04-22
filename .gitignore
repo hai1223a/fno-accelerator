@@ -1,0 +1,91 @@
+# Build directories
+build/
+cmake-build-*/
+out/
+dist/
+bin/
+obj/
+lib/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+CTestTestfile.cmake
+Testing/
+
+# Make/Ninja
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.elf
+*.hex
+*.bin
+*.map
+*.lst
+*.d
+.ninja_deps
+.ninja_log
+build.ninja
+
+# SystemC / simulation outputs
+*.vcd
+*.fst
+*.wlf
+*.ghw
+*.fsdb
+*.saif
+*.trn
+*.wdb
+*.log
+*.trace
+*.dump
+waves/
+traces/
+logs/
+sim_output/
+
+# Test and coverage outputs
+coverage/
+*.gcda
+*.gcno
+*.gcov
+*.profraw
+*.profdata
+junit.xml
+test-results/
+
+# Python helpers
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Editors and IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local environment and scratch files
+.env
+.env.*
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej

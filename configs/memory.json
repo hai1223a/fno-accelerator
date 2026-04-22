@@ -1,0 +1,53 @@
+{
+  "address_width": 32,
+  "regions": [
+    {
+      "name": "itcm",
+      "kind": "memory",
+      "base": "0x80000000",
+      "size": "0x00010000",
+      "read_latency_cycles": 1,
+      "write_latency_cycles": 1
+    },
+    {
+      "name": "dtcm",
+      "kind": "memory",
+      "base": "0x90000000",
+      "size": "0x00010000",
+      "read_latency_cycles": 1,
+      "write_latency_cycles": 1
+    },
+    {
+      "name": "clint",
+      "kind": "peripheral",
+      "base": "0x02000000",
+      "size": "0x00010000",
+      "read_latency_cycles": 2,
+      "write_latency_cycles": 2
+    },
+    {
+      "name": "plic",
+      "kind": "peripheral",
+      "base": "0x0C000000",
+      "size": "0x01000000",
+      "read_latency_cycles": 4,
+      "write_latency_cycles": 4
+    },
+    {
+      "name": "ppi",
+      "kind": "stub",
+      "base": "0x10000000",
+      "size": "0x10000000",
+      "read_latency_cycles": 8,
+      "write_latency_cycles": 8
+    },
+    {
+      "name": "fio",
+      "kind": "stub",
+      "base": "0xF0000000",
+      "size": "0x10000000",
+      "read_latency_cycles": 2,
+      "write_latency_cycles": 2
+    }
+  ]
+}
