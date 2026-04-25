@@ -1,3 +1,6 @@
 [submodule "third_party/e203_hbirdv2"]
 	path = third_party/e203_hbirdv2
 	url = https://github.com/riscv-mcu/e203_hbirdv2.git
+[submodule "third_party/RISC-V-TLM"]
+	path = third_party/RISC-V-TLM
+	url = https://github.com/mariusmm/RISC-V-TLM.git

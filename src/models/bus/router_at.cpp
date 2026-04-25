@@ -14,11 +14,21 @@ router_at::~router_at(){}
 
 void router_at::b_transport(tlm::tlm_generic_payload& trans, sc_time& delay)
 {
-    (void)delay;
+    const sc_dt::uint64 addr = trans.get_address();
     cout << "[" << sc_time_stamp() << "] "
          << name()
-         << " b_transport addr=0x" << hex << trans.get_address() << dec
+         << " b_transport addr=0x" << hex << addr << dec
          << endl;
 
-    trans.set_response_status(tlm::TLM_OK_RESPONSE);
+    if (addr >= 0x02000000 && addr < 0x02010000) {
+        router2clint_initiator_socket->b_transport(trans, delay);
+    } else if (addr >= 0x0C000000 && addr < 0x0D000000) {
+        router2plic_initiator_socket->b_transport(trans, delay);
+    } else if (addr >= 0x10000000 && addr < 0x20000000) {
+        router2ppi_initiator_socket->b_transport(trans, delay);
+    } else if (addr >= 0xF0000000 && addr <= 0xFFFFFFFF) {
+        router2fio_initiator_socket->b_transport(trans, delay);
+    } else {
+        router2mem_initiator_socket->b_transport(trans, delay);
+    }
 }

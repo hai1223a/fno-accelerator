@@ -12,4 +12,10 @@ enum class AccessSize {
     Word = 4,
 };
 
+struct args_option
+{
+    char* config_path;
+    char* bin_path;
+};
+
 } // namespace e203sim

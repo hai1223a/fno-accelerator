@@ -4,14 +4,14 @@
 #include <tlm>
 #include <tlm_utils/simple_target_socket.h>
 
-class clint_at : public sc_core::sc_module
+class nice_at : public sc_core::sc_module
 {
 private:
 
 public:
-    tlm_utils::simple_target_socket<clint_at> router2clint_target_socket;
+    tlm_utils::simple_target_socket<nice_at> cpu2nice_target_socket;
 
     void b_transport(tlm::tlm_generic_payload& trans, sc_core::sc_time& delay);
-    clint_at(sc_core::sc_module_name module_name);
-    ~clint_at();
+    nice_at(sc_core::sc_module_name module_name);
+    ~nice_at();
 };

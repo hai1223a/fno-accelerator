@@ -2,7 +2,7 @@ CXX ?= g++
 BUILD_DIR ?= build
 TARGET ?= $(BUILD_DIR)/e203-sim
 
-SYSTEMC_HOME ?= 
+SYSTEMC_HOME ?=
 
 # CPPFLAGS 存放头文件搜索路径, 宏定义, 预处理选项
 CPPFLAGS := -Iinclude
@@ -39,7 +39,7 @@ $(BUILD_DIR)/%.o: %.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -MMD -MP -c $< -o $@
 
 run: build
-	$(TARGET) --config configs/e203sim.json
+	$(TARGET) -h configs/e203sim.json
 
 print-config:
 	@echo "CXX=$(CXX)"

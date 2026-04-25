@@ -17,8 +17,10 @@ void memory_at::b_transport(tlm::tlm_generic_payload& trans, sc_time& delay)
 {
     (void)trans;
     (void)delay;
-    std::cout << "[" << sc_core::sc_time_stamp() << "] "
-              << name()
-              << " b_transport"
-              << std::endl;
+    cout << "[" << sc_time_stamp() << "] "
+         << name()
+         << " b_transport addr=0x" << hex << trans.get_address() << dec
+         << endl;
+
+    trans.set_response_status(tlm::TLM_OK_RESPONSE);
 }

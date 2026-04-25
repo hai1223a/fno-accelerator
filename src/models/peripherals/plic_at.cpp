@@ -1,19 +1,19 @@
-#include "models/peripherals/mem_at.h"
+#include "models/peripherals/plic_at.h"
 #include <iostream>
 
 using namespace std;
 using namespace sc_core;
 
-mem_at::mem_at(sc_module_name module_name)
+plic_at::plic_at(sc_module_name module_name)
     : sc_module(module_name)
 {
-    router2mem_target_socket.register_b_transport(this, &mem_at::b_transport);
+    router2plic_target_socket.register_b_transport(this, &plic_at::b_transport);
     cout << module_name << " created !" << endl;
 }
 
-mem_at::~mem_at() {}
+plic_at::~plic_at() {}
 
-void mem_at::b_transport(tlm::tlm_generic_payload& trans, sc_time& delay)
+void plic_at::b_transport(tlm::tlm_generic_payload& trans, sc_time& delay)
 {
     (void)delay;
     cout << "[" << sc_time_stamp() << "] "

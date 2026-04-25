@@ -1,4 +1,4 @@
-#include "models/core/cpu_at.h"
+#include "models/core/cpu.h"
 #include "models/core/core_at.h"
 #include "models/memory/memory_at.h"
 #include <iostream>
@@ -6,7 +6,7 @@
 using namespace std;
 using namespace sc_core;
 
-cpu_at::cpu_at(sc_module_name module_name)
+cpu::cpu(sc_module_name module_name)
     : sc_module(module_name)
 {
     core_at_ = new core_at("core");
@@ -15,12 +15,13 @@ cpu_at::cpu_at(sc_module_name module_name)
 
     core_at_->core2itlm_initiator_socket.bind(itlm_at_->core2tlm_target_socket);
     core_at_->core2dtlm_initiator_socket.bind(dtlm_at_->core2tlm_target_socket);
-    cpu2biu_initiator_socket.bind(core_at_->core2biu_initiator_socket);
+    core_at_->core2biu_initiator_socket.bind(cpu2biu_initiator_socket);
+    core_at_->core2nice_initiator_socket.bind(cpu2nice_initiator_socket);
 
     cout << module_name << " created !" << endl;
 }
 
-cpu_at::~cpu_at()
+cpu::~cpu()
 {
     delete dtlm_at_;
     delete itlm_at_;
