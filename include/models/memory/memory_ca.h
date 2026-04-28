@@ -4,14 +4,12 @@
 #include <tlm>
 #include <tlm_utils/simple_target_socket.h>
 
-class nice_at : public sc_core::sc_module
+class memory_ca : public sc_core::sc_module
 {
 private:
-
 public:
-    tlm_utils::simple_target_socket<nice_at> cpu2nice_target_socket;
-
+    tlm_utils::simple_target_socket<memory_ca> core2tlm_target_socket;
     void b_transport(tlm::tlm_generic_payload& trans, sc_core::sc_time& delay);
-    nice_at(sc_core::sc_module_name module_name);
-    ~nice_at();
+    memory_ca(sc_core::sc_module_name module_name);
+    ~memory_ca();
 };

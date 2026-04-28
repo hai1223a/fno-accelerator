@@ -1,21 +1,22 @@
-#include "models/peripherals/plic_at.h"
+#include "models/memory/memory_ca.h"
 #include "common/debug_logger.h"
 #include <iostream>
 
 using namespace std;
 using namespace sc_core;
 
-plic_at::plic_at(sc_module_name module_name)
+memory_ca::memory_ca(sc_module_name module_name)
     : sc_module(module_name)
 {
-    router2plic_target_socket.register_b_transport(this, &plic_at::b_transport);
+    core2tlm_target_socket.register_b_transport(this, &memory_ca::b_transport);
     E203_DEBUG_STREAM(module_name << " created !");
 }
 
-plic_at::~plic_at() {}
+memory_ca::~memory_ca() {}
 
-void plic_at::b_transport(tlm::tlm_generic_payload& trans, sc_time& delay)
+void memory_ca::b_transport(tlm::tlm_generic_payload& trans, sc_time& delay)
 {
+    (void)trans;
     (void)delay;
     E203_DEBUG_STREAM("[" << sc_time_stamp() << "] "
                           << name()

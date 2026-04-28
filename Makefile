@@ -39,7 +39,7 @@ $(BUILD_DIR)/%.o: %.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -MMD -MP -c $< -o $@
 
 run: build
-	$(TARGET) -h configs/e203sim.json
+	$(TARGET) -c configs/e203sim.json
 
 print-config:
 	@echo "CXX=$(CXX)"

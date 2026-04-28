@@ -1,4 +1,5 @@
 #include "models/bus/router_at.h" 
+#include "common/debug_logger.h"
 #include <iostream>
 using namespace std;
 using namespace sc_core;
@@ -7,7 +8,7 @@ router_at::router_at(sc_module_name module_name)
     :sc_module(module_name)
 {
     cpu2biu_target_socket.register_b_transport(this, &router_at::b_transport);
-    cout << module_name << " created !" << endl;
+    E203_DEBUG_STREAM(module_name << " created !");
 }
 
 router_at::~router_at(){}
@@ -15,10 +16,9 @@ router_at::~router_at(){}
 void router_at::b_transport(tlm::tlm_generic_payload& trans, sc_time& delay)
 {
     const sc_dt::uint64 addr = trans.get_address();
-    cout << "[" << sc_time_stamp() << "] "
-         << name()
-         << " b_transport addr=0x" << hex << addr << dec
-         << endl;
+    E203_DEBUG_STREAM("[" << sc_time_stamp() << "] "
+                          << name()
+                          << " b_transport addr=0x" << hex << addr << dec);
 
     if (addr >= 0x02000000 && addr < 0x02010000) {
         router2clint_initiator_socket->b_transport(trans, delay);

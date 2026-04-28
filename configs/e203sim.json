@@ -1,33 +1,7 @@
 {
   "name": "e203-at-smoke",
   "cycle_ns": 10,
-  "memory_config": "configs/memory.json",
-  "load": {
-    "format": "bin",
-    "address": "0x80000000"
-  },
-  "models": {
-    "core": "none",
-    "bus": "at",
-    "memory": "at",
-    "nice": "null"
-  },
-  "peripherals": {
-    "clint": "minimal",
-    "plic": "minimal",
-    "uart0": "lite",
-    "gpio": "stub",
-    "spi": "stub",
-    "i2c": "stub",
-    "pwm": "stub",
-    "wdt": "stub",
-    "rtc": "stub",
-    "pmu": "stub"
-  },
-  "trace": {
-    "enable": false,
-    "bus": false,
-    "retire": false,
-    "file": "traces/e203sim.trace"
-  }
+  "memory_config_path": "configs/memory.json",
+  "enable_debug": true,
+  "debug_path": "build/debug.log"
 }

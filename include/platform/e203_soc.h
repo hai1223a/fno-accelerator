@@ -7,13 +7,13 @@ class plic_at;
 class mem_at;
 class ppi_at;
 class fio_at;
-class nice_at;
+class nice_ca;
 
 class e203_soc: public sc_core::sc_module
 {
 private:
     cpu *cpu_;
-    nice_at *nice_at_;
+    nice_ca *nice_ca_;
     router_at *router_at_;
     clint_at *clint_at_;
     plic_at *plic_at_;

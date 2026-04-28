@@ -1,5 +1,4 @@
 {
-  "address_width": 32,
   "regions": [
     {
       "name": "itcm",
