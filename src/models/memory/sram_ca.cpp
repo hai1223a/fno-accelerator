@@ -1,12 +1,12 @@
 #include "models/memory/sram_ca.h"
+#include "common/debug_logger.h"
+#include <iostream>
+#include <systemc>
 
 sram_ca::sram_ca(uint32_t portwidth, uint32_t size)
-    :size(size), portwidth(portwidth)
+    :mem(size, 0), size(size), portwidth(portwidth)
     {
-        if (portwidth != 32 && portwidth != 64) {
-          throw "sram_ca only supports 32/64-bit port width";
-        }
-        mem.resize(size, 0);
+        SIM_ASSERT(portwidth == 32 || portwidth == 64, "sram_ca only supports 32/64-bit port width");
         port_bytes = portwidth / 8;
     }
 

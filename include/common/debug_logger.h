@@ -25,7 +25,7 @@ private:
 
 } // namespace e203sim
 
-#define E203_DEBUG_STREAM(expr)                                \
+#define INFO(expr)                                \
     do {                                                       \
         if (e203sim::debug_logger::instance().enabled()) {     \
             std::ostringstream oss;                            \
@@ -39,7 +39,7 @@ private:
         std::ostringstream oss;                         \
         oss << "[ERROR] " << sc_core::sc_time_stamp()   \
             << " [" << module << "] " << msg;           \
-        E203_DEBUG_STREAM(oss.str());                   \
+        INFO(oss.str());                   \
         std::cerr << oss.str() << std::endl;            \
         exit(1); \
       } while (0)
@@ -49,15 +49,20 @@ private:
         std::ostringstream oss;                         \
         oss << "[INFO] " << sc_core::sc_time_stamp()   \
             << " [" << module << "] " << msg;           \
-        E203_DEBUG_STREAM(oss.str());                   \
-        std::out << oss.str() << std::endl;            \
+        INFO(oss.str());                   \
+        if (e203sim::debug_logger::instance().enabled()) { \
+            std::cout << oss.str() << std::endl;            \
+        }\
       } while (0)
 
-#define SIM_ASSERT(cond, msg)                                      \
+
+#define SIM_ASSERT(cond, msg)                          \
     do {                                                           \
+        if (!(cond)) {                                             \
             std::cerr << "[ASSERT] " << sc_core::sc_time_stamp()   \
-                << " " << __FILE__ << ":" << __LINE__              \
-                << " " << __func__ << "(): " << msg << std::endl;  \
+            << " " << __FILE__ << ":" << __LINE__              \
+            << " " << __func__ << "(): " << msg << std::endl;  \
             std::abort();                                          \
+        }                                                           \
         } while (0)
 

@@ -13,10 +13,10 @@
 using namespace std;
 using namespace sc_core;
 
-e203_soc::e203_soc(sc_module_name module_name)
+e203_soc::e203_soc(sc_module_name module_name, const e203sim::sim_config &config)
     :sc_module(module_name)
 {
-    cpu_ = new cpu("cpu");
+    cpu_ = new cpu("cpu", config);
     router_at_ = new router_at("bus");
     nice_ca_ = new nice_ca("nice");
     clint_at_ = new clint_at("clint");
@@ -33,7 +33,7 @@ e203_soc::e203_soc(sc_module_name module_name)
     router_at_->router2ppi_initiator_socket.bind(ppi_at_->router2ppi_target_socket);
     router_at_->router2fio_initiator_socket.bind(fio_at_->router2fio_target_socket);
 
-    E203_DEBUG_STREAM(module_name << " created !");
+    INFO(module_name << " created !");
 }
 
 e203_soc::~e203_soc()

@@ -1,5 +1,6 @@
 #pragma once
 #include <systemc>
+#include "common/types.h"
 class cpu;
 class router_at;
 class clint_at;
@@ -21,7 +22,7 @@ private:
     ppi_at *ppi_at_;
     fio_at *fio_at_;
 public:
-    e203_soc(sc_core::sc_module_name module_name);
+    e203_soc(sc_core::sc_module_name module_name, const e203sim::sim_config &config);
     ~e203_soc();
 
 };

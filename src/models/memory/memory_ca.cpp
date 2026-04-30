@@ -9,7 +9,7 @@ memory_ca::memory_ca(sc_module_name module_name)
     : sc_module(module_name)
 {
     core2tlm_target_socket.register_b_transport(this, &memory_ca::b_transport);
-    E203_DEBUG_STREAM(module_name << " created !");
+    INFO(module_name << " created !");
 }
 
 memory_ca::~memory_ca() {}
@@ -18,7 +18,7 @@ void memory_ca::b_transport(tlm::tlm_generic_payload& trans, sc_time& delay)
 {
     (void)trans;
     (void)delay;
-    E203_DEBUG_STREAM("[" << sc_time_stamp() << "] "
+    INFO("[" << sc_time_stamp() << "] "
                           << name()
                           << " b_transport addr=0x" << hex << trans.get_address() << dec);
 
