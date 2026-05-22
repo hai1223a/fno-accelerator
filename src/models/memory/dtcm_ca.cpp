@@ -1,25 +1,9 @@
 #include "models/memory/dtcm_ca.h"
 #include "common/debug_logger.h"
+#include "sim/thread_trace.h"
 #include <iostream>
 
 using namespace sc_core;
-
-namespace {
-
-const char* tlm_command_name(tlm::tlm_command cmd)
-{
-    switch (cmd) {
-    case tlm::TLM_READ_COMMAND:
-        return "READ";
-    case tlm::TLM_WRITE_COMMAND:
-        return "WRITE";
-    case tlm::TLM_IGNORE_COMMAND:
-        return "IGNORE";
-    }
-    return "UNKNOWN_COMMAND";
-}
-
-} // namespace
 
 dtcm_ca::dtcm_ca(sc_module_name module_name, e203sim::memory_config* cfg, uint32_t cycle_unit)
     : sc_module(module_name), sram_ca(32, cfg->size), config(*cfg),
@@ -34,25 +18,14 @@ dtcm_ca::~dtcm_ca() {}
 
 tlm::tlm_sync_enum dtcm_ca::nb_transport_fw(tlm::tlm_generic_payload& trans, tlm::tlm_phase& phase, sc_time& delay)
 {
-    if (phase == tlm::BEGIN_REQ)
-    {
-        if (trans_pending != nullptr) {
-            SIM_INFO(basename(), "DTCM忙，暂不接收新的BEGIN_REQ");
-            return tlm::TLM_ACCEPTED;
-        }
-        trans_pending = &trans;
-        resp_event.notify(delay + clk_period);
-        phase = tlm::END_REQ;
-        delay = SC_ZERO_TIME;
-
-        return tlm::TLM_UPDATED;
-    }
-
-    if (phase == tlm::END_RESP)
-    {
-        return tlm::TLM_COMPLETED;
-    }
-    return tlm::TLM_ACCEPTED;
+    // DTCM 是 single-slot non-blocking target：BEGIN_REQ 接收后按一个 cycle 返回 BEGIN_RESP。
+    return e203sim::accept_nb_begin_req(trans_pending,
+                                        trans,
+                                        phase,
+                                        delay,
+                                        resp_event,
+                                        delay + clk_period,
+                                        basename());
 }
 
 void dtcm_ca::resp_thread()
@@ -60,13 +33,19 @@ void dtcm_ca::resp_thread()
     while (true)
     {
         wait(resp_event);
+        THREAD_TRACE("DTCM响应线程", "线程唤醒", "有待处理请求=" << (trans_pending != nullptr));
         while (trans_pending)
         {
+            THREAD_TRACE("DTCM响应线程", "访问SRAM", "地址=0x" << std::hex
+                         << trans_pending->get_address() << std::dec);
+            // access_memory 在响应前完成实际 SRAM 读写并设置 response_status。
             access_memory(*trans_pending);
 
             tlm::tlm_phase phase = tlm::BEGIN_RESP;
             sc_time delay = SC_ZERO_TIME;
 
+            THREAD_TRACE("DTCM响应线程", "返回响应", "地址=0x" << std::hex
+                         << trans_pending->get_address() << std::dec);
             lsu2dtcm_target_socket->nb_transport_bw(*trans_pending, phase, delay);
             trans_pending = nullptr;
         }
@@ -85,6 +64,7 @@ void dtcm_ca::access_memory(tlm::tlm_generic_payload& trans)
     }
     if(cmd == tlm::TLM_WRITE_COMMAND)
     {
+        // DTCM data path 以 32-bit lane 建模；sub-word store 通过 byte enable 控制。
         auto be_len = trans.get_byte_enable_length();
         auto* be_ptr = trans.get_byte_enable_ptr();
         SIM_ASSERT(be_len == 0 || be_ptr != nullptr, "你提供了不正确的字节掩码");
@@ -109,6 +89,7 @@ void dtcm_ca::access_memory(tlm::tlm_generic_payload& trans)
     }
     else if(cmd == tlm::TLM_READ_COMMAND)
     {
+        // 读响应只覆盖 payload 声明的 data_length，测试可检查短读不污染尾字节。
         uint64_t value = 0;
         if(!sram_read(addr - config.base_addr, value))
         {

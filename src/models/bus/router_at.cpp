@@ -7,7 +7,7 @@ using namespace sc_core;
 router_at::router_at(sc_module_name module_name)
     :sc_module(module_name)
 {
-    cpu2biu_target_socket.register_b_transport(this, &router_at::b_transport);
+    cpubiu2router_target_socket.register_b_transport(this, &router_at::b_transport);
     INFO(module_name << " created !");
 }
 
@@ -24,6 +24,8 @@ void router_at::b_transport(tlm::tlm_generic_payload& trans, sc_time& delay)
         router2clint_initiator_socket->b_transport(trans, delay);
     } else if (addr >= 0x0C000000 && addr < 0x0D000000) {
         router2plic_initiator_socket->b_transport(trans, delay);
+    } else if (addr >= 0x10013000 && addr < 0x10013028) {
+        router2uart0_initiator_socket->b_transport(trans, delay);
     } else if (addr >= 0x10000000 && addr < 0x20000000) {
         router2ppi_initiator_socket->b_transport(trans, delay);
     } else if (addr >= 0xF0000000 && addr <= 0xFFFFFFFF) {

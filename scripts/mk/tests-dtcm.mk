@@ -10,6 +10,7 @@ DTCM_TEST_SRC := \
 	tests/component/dtcm_ca_test.cpp \
 	src/models/memory/dtcm_ca.cpp \
 	src/models/memory/sram_ca.cpp \
+	src/sim/thread_trace.cpp \
 	src/sim/debug_logger.cpp
 
 DTCM_UNIT_TEST_OBJ := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(DTCM_UNIT_TEST_SRC))

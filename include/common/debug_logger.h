@@ -55,6 +55,18 @@ private:
         }\
       } while (0)
 
+// 架构异常日志：被模拟 CPU 可见的 trap，例如 illegal instruction、ecall、
+// access fault。该宏只记录，不终止仿真；commit 侧仍负责写 CSR 和 flush。
+#define SIM_ARCH_EXCEPTION(module, msg)                 \
+      do {                                              \
+        std::ostringstream oss;                         \
+        oss << "[ARCH_EXCEPTION] " << sc_core::sc_time_stamp() \
+            << " [" << module << "] " << msg;           \
+        INFO(oss.str());                                \
+        if (e203sim::debug_logger::instance().enabled()) { \
+            std::cout << oss.str() << std::endl;        \
+        }                                               \
+      } while (0)
 
 #define SIM_ASSERT(cond, msg)                          \
     do {                                                           \
@@ -65,4 +77,3 @@ private:
             std::abort();                                          \
         }                                                           \
         } while (0)
-

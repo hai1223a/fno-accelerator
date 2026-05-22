@@ -20,7 +20,7 @@ $(BUILD_DIR)/%.o: %.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -MMD -MP -c $< -o $@
 
 run: build
-	$(TARGET) -c configs/e203sim.json
+	$(TARGET) $(ARGS)
 
 print-config:
 	@echo "CXX=$(CXX)"
@@ -29,6 +29,10 @@ print-config:
 	@echo "CXXFLAGS=$(CXXFLAGS)"
 	@echo "LDFLAGS=$(LDFLAGS)"
 	@echo "LDLIBS=$(LDLIBS)"
+	@echo "AM_HOME=$(abspath $(AM_HOME))"
+	@echo "AM_ARCH=$(AM_ARCH)"
+	@echo "AM_CROSS_COMPILE=$(AM_CROSS_COMPILE)"
+	@echo "AM_APP=$(AM_APP)"
 	@echo "SRC=$(SRC)"
 	@echo "DTCM_UNIT_TEST_SRC=$(DTCM_UNIT_TEST_SRC)"
 	@echo "DTCM_TEST_SRC=$(DTCM_TEST_SRC)"

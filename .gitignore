@@ -89,3 +89,6 @@ Thumbs.db
 *.bak
 *.orig
 *.rej
+
+# Third-party tools cloned on demand
+third_party/FlameGraph/

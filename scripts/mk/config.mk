@@ -1,6 +1,9 @@
 CXX ?= g++
 BUILD_DIR ?= build
 TARGET ?= $(BUILD_DIR)/e203-sim
+CONFIG ?= configs/e203sim_pipetrace.json
+BIN ?= build/tests/integration/bin/branch_ebreak.bin
+ARGS ?= -c $(CONFIG) -i $(BIN)
 
 SYSTEMC_HOME ?=
 
@@ -8,7 +11,7 @@ SYSTEMC_HOME ?=
 CPPFLAGS := -Iinclude
 CXXFLAGS := -std=c++17 -Wall -Wextra -O0 -g
 LDFLAGS :=
-LDLIBS := -lsystemc
+LDLIBS := -lsystemc -ldl
 
 ifneq ($(SYSTEMC_HOME),)
 CPPFLAGS += -I$(SYSTEMC_HOME)/include

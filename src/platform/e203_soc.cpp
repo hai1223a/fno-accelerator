@@ -4,6 +4,7 @@
 #include "models/bus/router_at.h"
 #include "models/core/cpu.h"
 #include "models/peripherals/clint_at.h"
+#include "models/peripherals/uart0_at.h"
 #include "models/peripherals/plic_at.h"
 #include "models/peripherals/mem_at.h"
 #include "models/peripherals/ppi_at.h"
@@ -19,15 +20,17 @@ e203_soc::e203_soc(sc_module_name module_name, const e203sim::sim_config &config
     cpu_ = new cpu("cpu", config);
     router_at_ = new router_at("bus");
     nice_ca_ = new nice_ca("nice");
-    clint_at_ = new clint_at("clint");
+    clint_at_ = new clint_at("clint", config.cycle_ns);
+    uart0_at_ = new uart0_at("uart0");
     plic_at_ = new plic_at("plic");
     mem_at_ = new mem_at("sys_mem");
     ppi_at_ = new ppi_at("sys_ppi");
     fio_at_ = new fio_at("sys_fio");
 
-    cpu_->cpu2biu_initiator_socket.bind(router_at_->cpu2biu_target_socket);
+    cpu_->cpubiu2router_initiator_socket.bind(router_at_->cpubiu2router_target_socket);
     cpu_->cpu2nice_initiator_socket.bind(nice_ca_->cpu2nice_target_socket);
     router_at_->router2clint_initiator_socket.bind(clint_at_->router2clint_target_socket);
+    router_at_->router2uart0_initiator_socket.bind(uart0_at_->router2uart0_target_socket);
     router_at_->router2plic_initiator_socket.bind(plic_at_->router2plic_target_socket);
     router_at_->router2mem_initiator_socket.bind(mem_at_->router2mem_target_socket);
     router_at_->router2ppi_initiator_socket.bind(ppi_at_->router2ppi_target_socket);
@@ -42,8 +45,14 @@ e203_soc::~e203_soc()
     delete ppi_at_;
     delete mem_at_;
     delete plic_at_;
+    delete uart0_at_;
     delete clint_at_;
     delete nice_ca_;
     delete router_at_;
     delete cpu_;
+}
+
+void e203_soc::load_itcm_binary(const std::string& path, e203sim::addr_t load_addr)
+{
+    cpu_->load_itcm_binary(path, load_addr);
 }

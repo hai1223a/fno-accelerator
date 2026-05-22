@@ -1,40 +1,16 @@
 #include "models/core/lsu_ca.h"
+
 #include "common/debug_logger.h"
+#include "sim/thread_trace.h"
+
+#include <cstdlib>
+#include <iostream>
 
 using namespace sc_core;
 
 namespace {
 
-const char* tlm_phase_name(const tlm::tlm_phase& phase)
-{
-    if (phase == tlm::BEGIN_REQ) {
-        return "BEGIN_REQ";
-    }
-    if (phase == tlm::END_REQ) {
-        return "END_REQ";
-    }
-    if (phase == tlm::BEGIN_RESP) {
-        return "BEGIN_RESP";
-    }
-    if (phase == tlm::END_RESP) {
-        return "END_RESP";
-    }
-    return "UNKNOWN_PHASE";
-}
-
-const char* tlm_sync_name(tlm::tlm_sync_enum value)
-{
-    switch (value) {
-    case tlm::TLM_ACCEPTED:
-        return "TLM_ACCEPTED";
-    case tlm::TLM_UPDATED:
-        return "TLM_UPDATED";
-    case tlm::TLM_COMPLETED:
-        return "TLM_COMPLETED";
-    }
-    return "UNKNOWN_SYNC";
-}
-
+// LSU 与 SRAM target 之间使用 32-bit lane 小端数据布局。
 uint32_t load_le32(const std::array<uint8_t, 4>& data)
 {
     return (static_cast<uint32_t>(data[0]) << 0) |
@@ -49,6 +25,30 @@ void store_le32(std::array<uint8_t, 4>& data, uint32_t value)
     data[1] = static_cast<uint8_t>((value >> 8) & 0xff);
     data[2] = static_cast<uint8_t>((value >> 16) & 0xff);
     data[3] = static_cast<uint8_t>((value >> 24) & 0xff);
+}
+
+uint32_t sign_extend(uint32_t value, unsigned int bits)
+{
+    // load byte/halfword 的有符号扩展，返回 RV32 写回数据。
+    const uint32_t sign = 1u << (bits - 1u);
+    return (value ^ sign) - sign;
+}
+
+uint32_t make_store_lane(e203sim::AccessSize size, uint32_t store_data)
+{
+    switch (size) {
+    case e203sim::AccessSize::Byte: {
+        const uint32_t byte = store_data & 0xffu;
+        return byte | (byte << 8u) | (byte << 16u) | (byte << 24u);
+    }
+    case e203sim::AccessSize::HalfWord: {
+        const uint32_t half = store_data & 0xffffu;
+        return half | (half << 16u);
+    }
+    case e203sim::AccessSize::Word:
+        return store_data;
+    }
+    return store_data;
 }
 
 } // namespace
@@ -68,17 +68,52 @@ lsu_ca::lsu_ca(sc_module_name module_name, const e203sim::sim_config &config)
 
 lsu_ca::~lsu_ca() = default;
 
+bool lsu_ca::request_ready() const
+{
+    // v1 LSU 结构化限制：队列、context、nb_transport outstanding 都为空才接收新请求。
+    return request_q_.empty() && outstanding_ == nullptr && !has_nb_outstanding();
+}
+
+bool lsu_ca::issue(const request& req)
+{
+    if (!request_ready()) {
+        return false;
+    }
+    request_q_.push(req);
+    request_event_.notify(SC_ZERO_TIME);
+    return true;
+}
+
+bool lsu_ca::response_valid() const
+{
+    return !response_q_.empty();
+}
+
+lsu_ca::response lsu_ca::take_response()
+{
+    SIM_ASSERT(!response_q_.empty(), "LSU response queue is empty");
+    response rsp = response_q_.front();
+    response_q_.pop();
+    return rsp;
+}
+
+const sc_event& lsu_ca::response_event() const
+{
+    return response_event_;
+}
+
 tlm::tlm_sync_enum lsu_ca::nb_transport_bw(tlm::tlm_generic_payload& trans,
                                            tlm::tlm_phase& phase,
-                                           sc_core::sc_time& delay)
+                                           sc_time& delay)
 {
-     (void)delay;
+    (void)delay;
     if (phase == tlm::BEGIN_RESP) {
-        SIM_INFO(basename(), "lsu收到BEGIN_RESP"
-                        << ", addr=0x" << std::hex << trans.get_address() << std::dec);
-        phase = tlm::END_RESP;
+        // target 在 BEGIN_RESP 返回最终状态；LSU 转成 response 后回 END_RESP 完成事务。
         handle_response(trans);
-        SIM_INFO(basename(), "lsu返回END_RESP，事务完成");
+        complete_nb_begin_resp(trans, phase, basename());
+        outstanding_.reset();
+        response_event_.notify(SC_ZERO_TIME);
+        request_event_.notify(SC_ZERO_TIME);
         return tlm::TLM_COMPLETED;
     }
     return tlm::TLM_ACCEPTED;
@@ -86,218 +121,164 @@ tlm::tlm_sync_enum lsu_ca::nb_transport_bw(tlm::tlm_generic_payload& trans,
 
 void lsu_ca::handle_response(tlm::tlm_generic_payload& trans)
 {
-    SIM_ASSERT(outstanding_, "LSU outstanding是空的，但是收到了响应");
-    if (trans.is_response_error()) {
-        SIM_ERROR(basename(), "lsu2dtcm响应错误");
-    }
+    SIM_ASSERT(outstanding_, "LSU received response without outstanding request");
+    SIM_ASSERT(&outstanding_->trans == &trans, "LSU response payload mismatch");
 
-    if (trans.get_command() == tlm::TLM_READ_COMMAND) {
+    response rsp;
+    // itag/pc/rd 从原请求透传，EXU 用于 OITF 匹配和异常提交。
+    rsp.itag = outstanding_->req.itag;
+    rsp.pc = outstanding_->req.pc;
+    rsp.addr = outstanding_->req.addr;
+    rsp.rd = outstanding_->req.rd;
+    rsp.instr = outstanding_->req.instr;
+    rsp.trace_seq = outstanding_->req.trace_seq;
+    rsp.trace_fetch_tick = outstanding_->req.trace_fetch_tick;
+    rsp.trace_label = outstanding_->req.trace_label;
+    rsp.load = outstanding_->req.load;
+    rsp.rd_write = outstanding_->req.rd_write && outstanding_->req.load;
+    rsp.size = outstanding_->req.size;
+    rsp.store_data = outstanding_->req.store_data;
+    rsp.status = trans.get_response_status();
+    rsp.error = trans.is_response_error();
+    rsp.badaddr = outstanding_->req.addr;
+
+    if (outstanding_->req.load && !rsp.error) {
+        // SRAM 返回完整 32-bit lane；这里按原始地址低位提取 byte/halfword。
         const uint32_t lane = load_le32(outstanding_->data);
-        const uint32_t half = (lane >> ((outstanding_->addr & 0x2) * 8)) & 0xffffu;
-        const uint32_t byte = (lane >> ((outstanding_->addr & 0x3) * 8)) & 0xffu;
-        SIM_INFO(basename(), "收到读响应, lane=0x" << std::hex << lane
-                             << ", addr=0x" << outstanding_->addr
-                             << ", extract_half=0x" << half
-                             << ", extract_byte=0x" << byte << std::dec);
-    } else {
-        SIM_INFO(basename(), "收到写响应, addr=0x"
-                             << std::hex << outstanding_->addr
-                             << std::dec << ", 释放LSU outstanding");
-    }
-
-    outstanding_.reset();
-    if (test_state_ != test_state::done) {
-        if (test_state_ == test_state::read_after_store_byte && test_count_ != 0) {
-            test_count_--;
-            test_state_ = test_state::store_word;
-            test_addr_ = 0x80000000;
-        } else {
-            test_state_ = static_cast<test_state>(static_cast<int>(test_state_) + 1);
+        const uint32_t shift = (outstanding_->req.addr & 0x3u) * 8u;
+        switch (outstanding_->req.size) {
+        case e203sim::AccessSize::Byte: {
+            const uint32_t raw = (lane >> shift) & 0xffu;
+            rsp.load_data = outstanding_->req.unsigned_load ? raw : sign_extend(raw, 8);
+            break;
+        }
+        case e203sim::AccessSize::HalfWord: {
+            const uint32_t raw = (lane >> shift) & 0xffffu;
+            rsp.load_data = outstanding_->req.unsigned_load ? raw : sign_extend(raw, 16);
+            break;
+        }
+        case e203sim::AccessSize::Word:
+            rsp.load_data = lane;
+            break;
         }
     }
-    resp_event_.notify(SC_ZERO_TIME);
+
+    response_q_.push(rsp);
+    THREAD_TRACE("LSU访存线程", "接收响应",
+                 "PC=0x" << std::hex << rsp.pc
+                 << " 地址=0x" << rsp.addr
+                 << " itag=" << std::dec << rsp.itag
+                 << " 错误=" << rsp.error);
 }
 
-void lsu_ca::send_test_dtcm(std::unique_ptr<trans_ctx> ctx)
-{
-    SIM_ASSERT(!outstanding_, "LSU只允许一个全局outstanding事务");
-    tlm::tlm_phase phase(tlm::BEGIN_REQ);
-    sc_time delay(SC_ZERO_TIME);
-    outstanding_ = std::move(ctx);
-    const tlm::tlm_sync_enum res =
-        lsu2dtcm_initiator_socket->nb_transport_fw(outstanding_->trans, phase, delay);
-    SIM_INFO(basename(), "lsu 收到fw返回: sync=" << tlm_sync_name(res)
-                         << ", phase=" << tlm_phase_name(phase)
-                         << ", delay=" << delay);
-}
-
-void lsu_ca::send_test_itcm(std::unique_ptr<trans_ctx> ctx)
-{
-    SIM_ASSERT(!outstanding_, "LSU只允许一个全局outstanding事务");
-    tlm::tlm_phase phase(tlm::BEGIN_REQ);
-    sc_time delay(SC_ZERO_TIME);
-    outstanding_ = std::move(ctx);
-    const tlm::tlm_sync_enum res =
-        lsu2itcm_initiator_socket->nb_transport_fw(outstanding_->trans, phase, delay);
-    SIM_INFO(basename(), "lsu 收到fw返回: sync=" << tlm_sync_name(res)
-                         << ", phase=" << tlm_phase_name(phase)
-                         << ", delay=" << delay);
-}
-
-void lsu_ca::send_test_biu(std::unique_ptr<trans_ctx> ctx)
-{
-    SIM_ASSERT(!outstanding_, "LSU只允许一个全局outstanding事务");
-    tlm::tlm_phase phase(tlm::BEGIN_REQ);
-    sc_time delay(SC_ZERO_TIME);
-    outstanding_ = std::move(ctx);
-    const tlm::tlm_sync_enum res =
-        lsu2biu_initiator_socket->nb_transport_fw(outstanding_->trans, phase, delay);
-    SIM_INFO(basename(), "lsu 收到fw返回: sync=" << tlm_sync_name(res)
-                         << ", phase=" << tlm_phase_name(phase)
-                         << ", delay=" << delay);
-}
-
-std::unique_ptr<lsu_ca::trans_ctx> lsu_ca::make_store_word(uint32_t addr, uint32_t value)
+std::unique_ptr<lsu_ca::trans_ctx> lsu_ca::make_transaction(const request& req) const
 {
     auto ctx = std::make_unique<trans_ctx>();
-    ctx->addr = addr;
-    ctx->size = 2;
-    store_le32(ctx->data, value);
-    ctx->byte_enable = {1, 1, 1, 1};
-    ctx->trans.set_command(tlm::TLM_WRITE_COMMAND);
-    ctx->trans.set_address(addr);
-    ctx->trans.set_data_ptr(ctx->data.data());
-    ctx->trans.set_data_length(4);
-    ctx->trans.set_byte_enable_ptr(ctx->byte_enable.data());
-    ctx->trans.set_byte_enable_length(4);
-    ctx->trans.set_streaming_width(4);
-    ctx->trans.set_response_status(tlm::TLM_INCOMPLETE_RESPONSE);
-    return ctx;
-}
+    ctx->req = req;
+    // e203 写数据通路会把 byte/halfword store 数据复制到 32-bit lane；
+    // byte_enable 再按地址低位选择真正写入的字节。
+    store_le32(ctx->data, make_store_lane(req.size, req.store_data));
 
-std::unique_ptr<lsu_ca::trans_ctx> lsu_ca::make_store_half(uint32_t addr, uint16_t value)
-{
-    auto ctx = std::make_unique<trans_ctx>();
-    ctx->addr = addr;
-    ctx->size = 1;
-
-    const uint32_t wdata = (static_cast<uint32_t>(value) << 16)
-                         | static_cast<uint32_t>(value);
-    store_le32(ctx->data, wdata);
-
-    const uint32_t off = addr & 0x2;
-    ctx->byte_enable = (off == 0) ? std::array<uint8_t, 4>{1, 1, 0, 0}
-                                  : std::array<uint8_t, 4>{0, 0, 1, 1};
-
-    ctx->trans.set_command(tlm::TLM_WRITE_COMMAND);
-    ctx->trans.set_address(addr);
-    ctx->trans.set_data_ptr(ctx->data.data());
-    ctx->trans.set_data_length(4);
-    ctx->trans.set_byte_enable_ptr(ctx->byte_enable.data());
-    ctx->trans.set_byte_enable_length(4);
-    ctx->trans.set_streaming_width(4);
-    ctx->trans.set_response_status(tlm::TLM_INCOMPLETE_RESPONSE);
-    return ctx;
-}
-
-std::unique_ptr<lsu_ca::trans_ctx> lsu_ca::make_store_byte(uint32_t addr, uint8_t value)
-{
-    auto ctx = std::make_unique<trans_ctx>();
-    ctx->addr = addr;
-    ctx->size = 0;
-
-    const uint32_t wdata = static_cast<uint32_t>(value) * 0x01010101u;
-    store_le32(ctx->data, wdata);
     ctx->byte_enable = {0, 0, 0, 0};
-    ctx->byte_enable[addr & 0x3] = 1;
-
-    ctx->trans.set_command(tlm::TLM_WRITE_COMMAND);
-    ctx->trans.set_address(addr);
-    ctx->trans.set_data_ptr(ctx->data.data());
-    ctx->trans.set_data_length(4);
-    ctx->trans.set_byte_enable_ptr(ctx->byte_enable.data());
-    ctx->trans.set_byte_enable_length(4);
-    ctx->trans.set_streaming_width(4);
-    ctx->trans.set_response_status(tlm::TLM_INCOMPLETE_RESPONSE);
-    return ctx;
-}
-
-std::unique_ptr<lsu_ca::trans_ctx> lsu_ca::make_load_word(uint32_t addr)
-{
-    auto ctx = std::make_unique<trans_ctx>();
-    ctx->addr = addr;
-    ctx->size = 2;
-    ctx->trans.set_command(tlm::TLM_READ_COMMAND);
-    ctx->trans.set_address(addr);
-    ctx->trans.set_data_ptr(ctx->data.data());
-    ctx->trans.set_data_length(4);
-    ctx->trans.set_streaming_width(4);
-    ctx->trans.set_response_status(tlm::TLM_INCOMPLETE_RESPONSE);
-    return ctx;
-}
-
-void lsu_ca::issue_next_test()
-{
-    int hit = memories_.size()-1;
-    for(std::size_t i = 0; i < memories_.size(); i++) {
-        if(test_addr_ >= memories_[i]->base_addr && test_addr_ < memories_[i]->base_addr + memories_[i]->size) {
-            hit = i;
-        }}
-    auto send_to_hit = [this, hit](std::unique_ptr<trans_ctx> ctx) {
-        if (hit == 0) {
-            send_test_dtcm(std::move(ctx));
-        } else if (hit == 1) {
-            send_test_itcm(std::move(ctx));
+    // DTCM/ITCM target 当前以 4-byte data_length 建模局部写；sub-word store
+    // 通过 byte_enable 精确选择 lane 内字节。
+    switch (req.size) {
+    case e203sim::AccessSize::Byte:
+        ctx->byte_enable[req.addr & 0x3u] = 1;
+        break;
+    case e203sim::AccessSize::HalfWord:
+        if ((req.addr & 0x2u) == 0) {
+            ctx->byte_enable = {1, 1, 0, 0};
         } else {
-            send_test_biu(std::move(ctx));
-        }
-    };
-    switch (test_state_) {
-    case test_state::store_word:
-        SIM_INFO(basename(), "测试1: store word addr=0x" << std::hex
-                             << test_addr_ << ", value=0x11223344" << std::dec);
-        send_to_hit(make_store_word(test_addr_, 0x11223344));
-        break;
-    case test_state::read_after_store_word:
-        SIM_INFO(basename(), "测试2: load word检查整lane addr=0x" << std::hex
-                             << test_addr_ << std::dec);
-        send_to_hit(make_load_word(test_addr_));
-        break;
-    case test_state::store_half_high:
-        SIM_INFO(basename(), "测试3: store halfword高16位 addr=0x" << std::hex
-                             << (test_addr_ + 2) << ", value=0xaabb" << std::dec);
-        send_to_hit(make_store_half(test_addr_ + 2, 0xaabb));
-        break;
-    case test_state::read_after_store_half:
-        SIM_INFO(basename(), "测试4: load word检查halfword写入后的lane");
-        send_to_hit(make_load_word(test_addr_));
-        break;
-    case test_state::store_byte_mid:
-        SIM_INFO(basename(), "测试5: store byte中间字节 addr=0x" << std::hex
-                             << (test_addr_ + 1) << ", value=0xcc" << std::dec);
-        send_to_hit(make_store_byte(test_addr_ + 1, 0xcc));
-        break;
-    case test_state::read_after_store_byte:
-        SIM_INFO(basename(), "测试6: load word检查byte写入后的lane");
-        send_to_hit(make_load_word(test_addr_));
-        break;
-    case test_state::done:
-        if (!done_logged_) {
-            SIM_INFO(basename(), "LSU读写测试序列完成");
-            done_logged_ = true;
+            ctx->byte_enable = {0, 0, 1, 1};
         }
         break;
+    case e203sim::AccessSize::Word:
+        ctx->byte_enable = {1, 1, 1, 1};
+        break;
+    }
+
+    ctx->trans.set_command(req.load ? tlm::TLM_READ_COMMAND : tlm::TLM_WRITE_COMMAND);
+    // payload 字段在发起 BEGIN_REQ 前完整设置；response_status 初始为 incomplete。
+    ctx->trans.set_address(req.addr);
+    ctx->trans.set_data_ptr(ctx->data.data());
+    ctx->trans.set_data_length(4);
+    ctx->trans.set_byte_enable_ptr(req.load ? nullptr : ctx->byte_enable.data());
+    ctx->trans.set_byte_enable_length(req.load ? 0 : 4);
+    ctx->trans.set_streaming_width(4);
+    ctx->trans.set_response_status(tlm::TLM_INCOMPLETE_RESPONSE);
+    return ctx;
+}
+
+int lsu_ca::decode_memory_index(uint32_t addr) const
+{
+    // 返回 0=DTCM、1=ITCM、-1=BIU。空 config 视为未命中。
+    for (std::size_t i = 0; i < memories_.size(); ++i) {
+        const auto* mem = memories_[i];
+        if (mem != nullptr && addr >= mem->base_addr && addr < mem->base_addr + mem->size) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+void lsu_ca::issue_request_to_memory(std::unique_ptr<trans_ctx> ctx)
+{
+    SIM_ASSERT(!outstanding_ && !has_nb_outstanding(), "LSU only supports one outstanding request");
+
+    const int hit = decode_memory_index(ctx->req.addr);
+    outstanding_ = std::move(ctx);
+    // phase 时序：LSU 发 BEGIN_REQ；target 接受后返回 END_REQ，稍后 BEGIN_RESP。
+    if (hit == 0) {
+        send_nb_begin_req(lsu2dtcm_initiator_socket, outstanding_->trans, basename(), "LSU->DTCM");
+    } else if (hit == 1) {
+        send_nb_begin_req(lsu2itcm_initiator_socket, outstanding_->trans, basename(), "LSU->ITCM");
+    } else {
+        send_nb_begin_req(lsu2biu_initiator_socket, outstanding_->trans, basename(), "LSU->BIU");
     }
 }
 
 void lsu_ca::thread()
 {
     while (true) {
-        wait(clk_period_, resp_event_);
-        // if (!outstanding_) {
-        //     issue_next_test();
-        // } else {
-        //     SIM_INFO(basename(), "LSU主线程检测到仍有outstanding，等待响应");
-        // }
+        wait(request_event_);
+        THREAD_TRACE("LSU访存线程", "线程唤醒", "请求队列=" << request_q_.size()
+                     << " 未完成请求=" << static_cast<bool>(outstanding_));
+        while (!request_q_.empty() && outstanding_ == nullptr && !has_nb_outstanding()) {
+            request req = request_q_.front();
+            request_q_.pop();
+            THREAD_TRACE("LSU访存线程", "取出请求", "PC=0x" << std::hex << req.pc
+                         << " 地址=0x" << req.addr << std::dec
+                         << " itag=" << req.itag << " 读请求=" << req.load);
+
+            // 地址对齐属于 AGU/LSU 同步错误，不发 TLM transaction，直接返回错误完成包。
+            if ((req.size == e203sim::AccessSize::HalfWord && (req.addr & 0x1u) != 0) ||
+                (req.size == e203sim::AccessSize::Word && (req.addr & 0x3u) != 0)) {
+                response rsp;
+                rsp.itag = req.itag;
+                rsp.pc = req.pc;
+                rsp.addr = req.addr;
+                rsp.rd = req.rd;
+                rsp.instr = req.instr;
+                rsp.trace_seq = req.trace_seq;
+                rsp.trace_fetch_tick = req.trace_fetch_tick;
+                rsp.load = req.load;
+                rsp.rd_write = false;
+                rsp.size = req.size;
+                rsp.store_data = req.store_data;
+                rsp.error = true;
+                rsp.badaddr = req.addr;
+                rsp.status = tlm::TLM_ADDRESS_ERROR_RESPONSE;
+                response_q_.push(rsp);
+                response_event_.notify(SC_ZERO_TIME);
+                THREAD_TRACE("LSU访存线程", "返回未对齐错误", "地址=0x" << std::hex << req.addr << std::dec);
+                continue;
+            }
+
+            issue_request_to_memory(make_transaction(req));
+            THREAD_TRACE("LSU访存线程", "等待响应", "itag=" << req.itag);
+            // 保持单 outstanding：等待响应释放 context 后再处理后续请求。
+            wait(response_event_ | request_event_);
+        }
     }
 }

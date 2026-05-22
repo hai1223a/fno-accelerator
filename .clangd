@@ -1,0 +1,11 @@
+1CompileFlags:
+  Add:
+    - -std=c++17
+    - -Iinclude
+    - -Isrc
+    - -Itests
+    - -Iabstract-machine/am/include
+    - -Iabstract-machine/klib/include
+    - -I/home/yunhai/.local/share/systemC/include
+Diagnostics:
+  UnusedIncludes: None

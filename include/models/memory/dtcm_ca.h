@@ -4,6 +4,7 @@
 #include <tlm>
 #include <tlm_utils/simple_target_socket.h>
 #include <queue>
+#include "common/tlm_nb_transport.h"
 #include "models/memory/sram_ca.h"
 #include "common/types.h"
 

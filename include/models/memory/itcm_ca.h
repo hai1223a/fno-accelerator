@@ -3,6 +3,8 @@
 #include <systemc>
 #include <tlm>
 #include <tlm_utils/simple_target_socket.h>
+#include <vector>
+#include "common/tlm_nb_transport.h"
 #include "models/memory/sram_ca.h"
 #include "common/types.h"
 
@@ -49,4 +51,7 @@ public:
                                            sc_core::sc_time& delay);
     itcm_ca(sc_core::sc_module_name module_name, e203sim::memory_config* cfg, uint32_t cycle_unit);
     ~itcm_ca();
+
+    bool contains_range(e203sim::addr_t addr, std::size_t size) const;
+    void load_binary(e203sim::addr_t load_addr, const std::vector<uint8_t>& bytes);
 };

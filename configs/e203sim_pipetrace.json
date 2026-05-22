@@ -1,0 +1,16 @@
+{
+  "name": "e203-pipetrace-smoke",
+  "cycle_ns": 10,
+  "reset_pc": "0x80000000",
+  "load_addr": "0x80000000",
+  "memory_config_path": "configs/1MB_itcm_1MB_dtcm.json",
+  "enable_debug": false,
+  "debug_path": "build/debug.log",
+  "enable_pipe_trace": true,
+  "pipe_trace_path": "build/trace.out",
+  "enable_thread_trace": true,
+  "thread_trace_path": "build/thread_trace.out",
+  "enable_difftest": false,
+  "difftest_ref_so": "third_party/spike-diff/build/riscv32-spike-so",
+  "difftest_check_store": true
+}

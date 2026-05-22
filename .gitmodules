@@ -4,3 +4,9 @@
 [submodule "third_party/RISC-V-TLM"]
 	path = third_party/RISC-V-TLM
 	url = https://github.com/mariusmm/RISC-V-TLM.git
+[submodule "am-kernels"]
+	path = am-kernels
+	url = https://github.com/NJU-ProjectN/am-kernels.git
+[submodule "riscv-tests-am"]
+	path = riscv-tests-am
+	url = https://github.com/NJU-ProjectN/riscv-tests-am.git

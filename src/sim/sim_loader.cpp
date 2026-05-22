@@ -98,9 +98,21 @@ int sim_loader::load_config(const std::string& config_path, sim_config& cfg) con
     nlohmann::json j;
     file >> j;
     cfg.cycle_ns = j.value("cycle_ns", 10u);
+    cfg.reset_pc = parse_u32_json(j, "reset_pc", 0);
+    cfg.load_addr = parse_u32_json(j, "load_addr", cfg.reset_pc);
+    if (cfg.bin_path.empty()) {
+        cfg.bin_path = j.value("bin_path", "");
+    }
     cfg.memory_config_path = j.value("memory_config_path", "");
     cfg.enable_debug = j.value("enable_debug", false);
     cfg.debug_path = j.value("debug_path", "debug.txt");
+    cfg.enable_pipe_trace = j.value("enable_pipe_trace", false);
+    cfg.pipe_trace_path = j.value("pipe_trace_path", "build/trace.out");
+    cfg.enable_thread_trace = j.value("enable_thread_trace", false);
+    cfg.thread_trace_path = j.value("thread_trace_path", "build/thread_trace.out");
+    cfg.enable_difftest = j.value("enable_difftest", false);
+    cfg.difftest_ref_so = j.value("difftest_ref_so", "third_party/spike-diff/build/riscv32-spike-so");
+    cfg.difftest_check_store = j.value("difftest_check_store", true);
     cfg.print();
 
     std::ifstream mem_file(cfg.memory_config_path);
